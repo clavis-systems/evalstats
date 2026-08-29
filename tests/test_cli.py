@@ -58,6 +58,13 @@ def test_leaderboard_csv_is_parseable(results_csv, tmp_path):
     assert "rank,model" in res.stdout
 
 
+def test_summary_markdown_format(results_csv):
+    res = runner.invoke(app, ["summary", results_csv, "--format", "md"])
+    assert res.exit_code == 0
+    assert "| model | task |" in res.stdout
+    assert "| --- |" in res.stdout
+
+
 def test_power_modes():
     r1 = runner.invoke(app, ["power", "ci", "--p", "0.7", "--half-width", "0.02"])
     r2 = runner.invoke(app, ["power", "paired", "--mde", "0.02", "--p-pooled", "0.7"])

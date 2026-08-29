@@ -38,11 +38,26 @@ def _load(path: str, lm_eval: bool, metric: str | None) -> pd.DataFrame:
         raise typer.Exit(2)
 
 
+def _to_markdown(df: pd.DataFrame) -> str:
+    def cell(v: object) -> str:
+        return f"{v:.4f}" if isinstance(v, float) else str(v)
+
+    cols = [str(c) for c in df.columns]
+    lines = [
+        "| " + " | ".join(cols) + " |",
+        "| " + " | ".join("---" for _ in cols) + " |",
+    ]
+    lines += ["| " + " | ".join(cell(v) for v in row) + " |" for row in df.itertuples(index=False)]
+    return "\n".join(lines)
+
+
 def _emit(df: pd.DataFrame, fmt: str) -> None:
     if fmt == "csv":
         typer.echo(df.to_csv(index=False))
     elif fmt == "json":
         typer.echo(df.to_json(orient="records", indent=2))
+    elif fmt == "md":
+        typer.echo(_to_markdown(df))
     else:
         typer.echo(df.to_string(index=False))
 
@@ -57,7 +72,7 @@ def version() -> None:
 def summary(
     results: str = typer.Argument(..., help="CSV / JSONL results file."),
     level: float = typer.Option(0.95, help="Confidence level."),
-    fmt: str = typer.Option("table", "--format", help="table | csv | json."),
+    fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
     lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
     metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
 ) -> None:
@@ -119,7 +134,7 @@ def leaderboard(
     level: float = typer.Option(0.95, help="Confidence level."),
     correction: str = typer.Option("holm", help="holm | bh | none."),
     seed: int = typer.Option(0, help="RNG seed."),
-    fmt: str = typer.Option("table", "--format", help="table | csv | json."),
+    fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
     lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
     metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
 ) -> None:

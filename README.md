@@ -97,7 +97,7 @@ in NLP*.
 - [ ] v0.2: Bradley-Terry / Elo for pairwise-preference arenas
 - [ ] v0.2: LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
 - [ ] adapters for `lighteval` and OpenAI `evals` output
-- [ ] `--format md` for drop-in paper tables
+- [x] `--format md` for drop-in paper tables
 
 ## Development
 
