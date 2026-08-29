@@ -17,6 +17,7 @@ import glob
 import json
 import os
 import re
+import warnings
 from collections.abc import Iterable
 
 import pandas as pd
@@ -112,6 +113,14 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     bad = int(out["score"].isna().sum())
     if bad:
         raise ValueError(f"{bad} row(s) have a non-numeric score after coercion")
+
+    dup = int(out.duplicated(subset=["model", "task", "item_id"]).sum())
+    if dup:
+        warnings.warn(
+            f"{dup} row(s) share a (model, task, item_id) key; model comparison "
+            "averages such rows together. De-duplicate or make item_id unique.",
+            stacklevel=2,
+        )
     return out.reset_index(drop=True)
 
 
@@ -230,6 +239,7 @@ def from_lm_eval_harness(
 
     records: list[dict] = []
     seen_numeric_keys: set[str] = set()
+    id_counts: dict[tuple[str, str, str], int] = {}
     for fp in files:
         fname = os.path.basename(fp)
         m = re.match(r"samples_(?P<task>.+?)_\d{4}-\d{2}-\d{2}.*\.jsonl$", fname) or re.match(
@@ -244,13 +254,14 @@ def from_lm_eval_harness(
                     k for k, v in line.items() if isinstance(v, (int, float, bool))
                 )
                 continue
+            raw_id = str(line.get("doc_id", line.get("id", len(records))))
+            key = (this_model, task, raw_id)
+            id_counts[key] = id_counts.get(key, 0) + 1
+            # Some published sample logs concatenate several runs of the same
+            # docs; disambiguate repeats so downstream pairing does not merge them.
+            item_id = raw_id if id_counts[key] == 1 else f"{raw_id}#{id_counts[key]}"
             records.append(
-                {
-                    "model": this_model,
-                    "task": task,
-                    "item_id": str(line.get("doc_id", line.get("id", len(records)))),
-                    "score": picked[1],
-                }
+                {"model": this_model, "task": task, "item_id": item_id, "score": picked[1]}
             )
     if not records:
         hint = ", ".join(sorted(seen_numeric_keys)) or "none"

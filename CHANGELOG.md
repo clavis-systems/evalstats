@@ -6,6 +6,17 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
 
 ## [Unreleased]
 
+### Fixed
+- Real-data validation against a live lm-evaluation-harness `samples.jsonl`
+  (see `docs/VALIDATION.md`):
+  - `from_lm_eval_harness` disambiguates repeated `doc_id`s (`7`, `7#2`, ...)
+    when a log concatenates several runs, so paired comparison no longer merges
+    them; `load_results` warns on duplicate `(model, task, item_id)` keys.
+  - single-cluster inputs no longer collapse the interval to a point:
+    `summarize` / `leaderboard` fall back to a plain CLT estimate,
+    `paired_difference` to an item-level bootstrap, `clustered_mean_estimate`
+    warns and returns the CLT interval — each with a warning.
+
 ## [0.1.0] - 2026-08-29
 
 Initial release.

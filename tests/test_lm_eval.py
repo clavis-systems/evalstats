@@ -91,3 +91,14 @@ def test_glob_input(sample_dir):
 def test_missing_path_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         from_lm_eval_harness(str(tmp_path / "nope"))
+
+
+def test_repeated_doc_ids_are_disambiguated(tmp_path):
+    """Some published logs concatenate several runs of the same docs."""
+    f = tmp_path / "samples_gsm8k_2024-01-02T03-04-05.000000.jsonl"
+    rows = [{"doc_id": i % 4, "target": "x", "exact_match": float(i % 2)} for i in range(8)]
+    _write(f, rows)
+    df = from_lm_eval_harness(str(f))
+    assert len(df) == 8
+    assert df["item_id"].is_unique
+    assert set(df["item_id"]) == {"0", "1", "2", "3", "0#2", "1#2", "2#2", "3#2"}

@@ -3,6 +3,15 @@
 Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
+## ADR-008 — Degrade gracefully when there is only one cluster
+A single `task` (one cluster) gives the cluster bootstrap nothing to resample,
+so it reported `SE = 0` / a point CI — actively misleading. Found during
+real-data validation (`docs/VALIDATION.md`). Now: `summarize` / `leaderboard`
+fall back to a plain CLT estimate, `paired_difference` falls back to an
+item-level bootstrap, and `clustered_mean_estimate` warns and returns the CLT
+interval. A warning fires so the fallback is never silent. Revisit if we add a dedicated
+single-cluster method (e.g. subsampling within the cluster).
+
 ## ADR-007 — Calibration tests are a release gate
 The credibility of the whole package is "the p-values are honest". So
 `tests/test_stats.py` includes Monte-Carlo checks that, under the null, the

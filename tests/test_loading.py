@@ -50,3 +50,12 @@ def test_string_boolean_scores_are_coerced():
 def test_missing_column_raises():
     with pytest.raises(ValueError, match="missing required column"):
         from_records([{"model": "a", "task": "t", "score": 1}])
+
+
+def test_duplicate_key_warns():
+    rows = [
+        {"model": "a", "task": "t", "item_id": "1", "score": 1},
+        {"model": "a", "task": "t", "item_id": "1", "score": 0},
+    ]
+    with pytest.warns(UserWarning, match="share a .model, task, item_id. key"):
+        from_records(rows)

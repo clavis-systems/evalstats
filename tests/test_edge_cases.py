@@ -47,11 +47,13 @@ def test_clustered_cr1_needs_two_clusters():
         clustered_mean_estimate([1.0, 0.0, 1.0], ["only", "only", "only"], method="cr1")
 
 
-def test_clustered_bootstrap_survives_single_cluster():
-    est = clustered_mean_estimate(
-        [1.0, 0.0, 1.0, 0.0], ["c", "c", "c", "c"], method="cluster-bootstrap", seed=0
-    )
-    assert est.se == 0.0  # only one cluster -> every resample is identical
+def test_clustered_bootstrap_single_cluster_warns_and_falls_back():
+    with pytest.warns(UserWarning, match="fewer than 2 clusters"):
+        est = clustered_mean_estimate(
+            [1.0, 0.0, 1.0, 0.0], ["c", "c", "c", "c"], method="cluster-bootstrap", seed=0
+        )
+    assert est.se > 0.0  # plain CLT interval, not a degenerate zero
+    assert est.method == "clt"
 
 
 def test_correction_on_single_pvalue():

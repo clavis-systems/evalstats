@@ -16,6 +16,7 @@ Conventions
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -162,6 +163,14 @@ def clustered_mean_estimate(
         lo, hi = mean - z * se, mean + z * se
         lo, hi = _maybe_clip(lo, hi, a)
     elif method == "cluster-bootstrap":
+        if n_clusters < 2:
+            warnings.warn(
+                "clustered_mean_estimate got fewer than 2 clusters; a single "
+                "cluster carries no clustering information, so returning a plain "
+                "CLT interval instead.",
+                stacklevel=2,
+            )
+            return mean_estimate(a, level=level)
         rng = np.random.default_rng(seed)
         by_cluster = [a[g == cid] for cid in uniq]
         boot = np.empty(n_boot, dtype=float)
@@ -246,9 +255,19 @@ def paired_difference(
     obs = float(d.mean())
     rng = np.random.default_rng(seed)
 
-    # --- bootstrap CI -----------------------------------------------------
-    if clusters is not None:
+    use_clusters = clusters is not None
+    if use_clusters:
         g = np.asarray(clusters).ravel()[keep]
+        if np.unique(g).size < 2:
+            warnings.warn(
+                "paired_difference got fewer than 2 distinct clusters; "
+                "falling back to an item-level bootstrap for the interval.",
+                stacklevel=2,
+            )
+            use_clusters = False
+
+    # --- bootstrap CI -----------------------------------------------------
+    if use_clusters:
         uniq = np.unique(g)
         by_cluster = [d[g == cid] for cid in uniq]
         n_clusters = uniq.size
@@ -289,7 +308,7 @@ def paired_difference(
         n=n,
         n_discordant=n_disc,
         level=level,
-        method="cluster-bootstrap" if clusters is not None else "bootstrap",
+        method="cluster-bootstrap" if use_clusters else "bootstrap",
     )
 
 

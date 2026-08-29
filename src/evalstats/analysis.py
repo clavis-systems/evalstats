@@ -24,8 +24,23 @@ __all__ = ["leaderboard", "pairwise_significance", "summarize"]
 OVERALL = "(overall)"
 
 
+def _overall_estimate(mdf: pd.DataFrame, *, level: float, seed: int):
+    """Per-model overall score across tasks.
+
+    Cluster-robust (tasks as clusters) when there are >= 2 tasks; a plain CLT
+    estimate when there is only one, because a single cluster carries no
+    between-cluster information and the cluster bootstrap would then report a
+    misleadingly tiny interval.
+    """
+    scores = mdf["score"].to_numpy()
+    if mdf["task"].nunique() >= 2:
+        return clustered_mean_estimate(scores, mdf["task"].to_numpy(), level=level, seed=seed)
+    return mean_estimate(scores, level=level)
+
+
 def summarize(df: pd.DataFrame, *, level: float = 0.95, seed: int = 0) -> pd.DataFrame:
-    """Per-(model, task) means plus a cluster-robust per-model overall row."""
+    """Per-(model, task) means plus a per-model overall row (cluster-robust when
+    the model has more than one task)."""
     rows: list[dict] = []
     for model, mdf in df.groupby("model", sort=True):
         for task, tdf in mdf.groupby("task", sort=True):
@@ -41,12 +56,7 @@ def summarize(df: pd.DataFrame, *, level: float = 0.95, seed: int = 0) -> pd.Dat
                     "ci_high": est.ci_high,
                 }
             )
-        overall = clustered_mean_estimate(
-            mdf["score"].to_numpy(),
-            mdf["task"].to_numpy(),
-            level=level,
-            seed=seed,
-        )
+        overall = _overall_estimate(mdf, level=level, seed=seed)
         rows.append(
             {
                 "model": model,
@@ -92,7 +102,9 @@ def pairwise_significance(
         pair = wide[[a, b]].dropna()
         if pair.empty:
             continue
-        clusters = pair.index.get_level_values("task").to_numpy()
+        tasks = pair.index.get_level_values("task")
+        # Clustering only means something with >= 2 tasks in common.
+        clusters = tasks.to_numpy() if tasks.nunique() >= 2 else None
         res = paired_difference(
             pair[a].to_numpy(),
             pair[b].to_numpy(),
@@ -142,16 +154,15 @@ def leaderboard(
     n_boot: int = 10_000,
     n_perm: int = 10_000,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Ranked table (cluster-robust overall score) and the pairwise matrix.
+    """Ranked table (overall score, cluster-robust across tasks) and the
+    pairwise matrix.
 
     Returns ``(table, pairs)``. ``table`` has one row per model with rank, mean,
     CI and n. ``pairs`` is :func:`pairwise_significance` output.
     """
     rows: list[dict] = []
     for model, mdf in df.groupby("model", sort=True):
-        est = clustered_mean_estimate(
-            mdf["score"].to_numpy(), mdf["task"].to_numpy(), level=level, seed=seed
-        )
+        est = _overall_estimate(mdf, level=level, seed=seed)
         rows.append(
             {
                 "model": model,
