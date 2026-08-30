@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
 
 ## [Unreleased]
 
+### Changed
+- Table / Markdown / HTML output shows a small nonzero value (a tiny p-value or
+  CI bound) in scientific notation instead of rounding it to `0.0000`; an exact
+  zero still prints `0.0000`.
+
 ### Added
 - Pairwise-preference (arena) support: `evalstats.preference` with
   `bradley_terry` (MM fit, bootstrap CIs on ratings and on every pairwise gap,

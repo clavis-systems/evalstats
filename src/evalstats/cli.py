@@ -24,9 +24,18 @@ app = typer.Typer(
     help="Significance-aware comparison of language-model evaluation results.",
 )
 
+
+def _fmt_num(v: float) -> str:
+    """4 decimals, but keep small nonzero values (p-values, tiny CIs) readable
+    instead of rounding them to a misleading 0.0000."""
+    if v != 0 and abs(v) < 5e-5:
+        return f"{v:.1e}"
+    return f"{v:.4f}"
+
+
 pd.set_option("display.width", 200)
 pd.set_option("display.max_rows", 200)
-pd.set_option("display.float_format", lambda v: f"{v:.4f}")
+pd.set_option("display.float_format", _fmt_num)
 
 
 def _load(path: str, lm_eval: bool, metric: str | None) -> pd.DataFrame:
@@ -41,7 +50,7 @@ def _load(path: str, lm_eval: bool, metric: str | None) -> pd.DataFrame:
 
 def _to_markdown(df: pd.DataFrame) -> str:
     def cell(v: object) -> str:
-        return f"{v:.4f}" if isinstance(v, float) else str(v)
+        return _fmt_num(v) if isinstance(v, float) else str(v)
 
     cols = [str(c) for c in df.columns]
     lines = [

@@ -5,9 +5,16 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from evalstats.cli import app
+from evalstats.cli import _fmt_num, app
 
 runner = CliRunner()
+
+
+def test_fmt_num_keeps_tiny_values_readable():
+    assert _fmt_num(0.0) == "0.0000"
+    assert _fmt_num(0.1234) == "0.1234"
+    assert _fmt_num(7.3e-12) == "7.3e-12"  # not a misleading "0.0000"
+    assert _fmt_num(-3e-6).startswith("-3.0e-06")
 
 
 @pytest.fixture
