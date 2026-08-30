@@ -62,5 +62,5 @@ Initial release.
 - `docs/METHODS.md`, `docs/DECISIONS.md`, `CONTRIBUTING.md`.
 - `py.typed` marker; `.gitattributes` normalising line endings to LF.
 
-[Unreleased]: https://github.com/your-username/evalstats/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-username/evalstats/releases/tag/v0.1.0
+[Unreleased]: https://github.com/clavis-systems/evalstats/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/clavis-systems/evalstats/releases/tag/v0.1.0

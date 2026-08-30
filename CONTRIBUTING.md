@@ -6,7 +6,7 @@ adapter choked on my real eval logs" — is the most useful thing right now.
 ## Development setup
 
 ```bash
-git clone <your fork>
+git clone https://github.com/clavis-systems/evalstats
 cd evalstats
 python -m pip install -e ".[dev,report]"
 python scripts/make_synthetic.py     # writes examples/results.jsonl
