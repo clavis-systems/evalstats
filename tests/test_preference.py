@@ -82,3 +82,47 @@ def test_bradley_terry_needs_two_models():
     df = pd.DataFrame({"model_a": ["x"], "model_b": ["x"], "outcome": ["tie"]})
     with pytest.raises(ValueError):
         bradley_terry(df)
+
+
+def _simulate_rk(skill, theta, n_per_pair, seed):
+    rng = np.random.default_rng(seed)
+    models = list(skill)
+    rows = []
+    for i, a in enumerate(models):
+        for b in models[i + 1 :]:
+            pa, pb = np.exp(skill[a]), np.exp(skill[b])
+            p_a = pa / (pa + theta * pb)
+            p_b = pb / (theta * pa + pb)
+            probs = [p_a, p_b, max(1.0 - p_a - p_b, 0.0)]
+            for _ in range(n_per_pair):
+                rows.append((a, b, rng.choice(["a", "b", "tie"], p=probs)))
+    return pd.DataFrame(rows, columns=["model_a", "model_b", "outcome"])
+
+
+def test_rao_kupper_recovers_ratings_and_theta():
+    df = _simulate_rk({"top": 0.8, "mid": 0.0, "low": -0.8}, theta=2.0, n_per_pair=300, seed=0)
+    res = bradley_terry(df, tie="rao-kupper", n_boot=120, seed=1)
+    assert list(res.ranking["model"]) == ["top", "mid", "low"]
+    assert res.tie_param is not None
+    assert 1.4 < res.tie_param < 3.0  # true theta is 2.0
+    assert res.tie_param_ci[0] <= res.tie_param <= res.tie_param_ci[1]
+
+
+def test_rao_kupper_without_ties_warns_and_falls_back():
+    df = _simulate({"a": 0.5, "b": 0.0}, n_per_pair=80, tie_rate=0.0, seed=0)
+    with pytest.warns(UserWarning, match="no ties"):
+        res = bradley_terry(df, tie="rao-kupper", n_boot=50)
+    assert res.tie_param is None
+
+
+def test_unknown_tie_model_raises():
+    df = _simulate({"a": 0.3, "b": 0.0}, n_per_pair=40, tie_rate=0.1, seed=0)
+    with pytest.raises(ValueError, match="tie model"):
+        bradley_terry(df, tie="bogus", n_boot=10)
+
+
+def test_split_tie_result_has_no_theta(arena_df):
+    res = bradley_terry(arena_df, n_boot=200)
+    assert res.tie == "split"
+    assert res.tie_param is None
+    assert "theta" not in res.verdict()

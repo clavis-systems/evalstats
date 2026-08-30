@@ -3,6 +3,16 @@
 Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
+## ADR-011 — Rao-Kupper ties: opt-in, MLE, bootstrap for theta
+`bradley_terry(tie="split")` stays the default (fast MM fit, matches Chatbot
+Arena's basic BT). `tie="rao-kupper"` adds the Rao-Kupper (1967) tie model,
+fitted by ML with `scipy.optimize` (already a dependency) — no new closed-form
+SEs, `theta` gets a bootstrap CI like everything else. It is opt-in because it
+runs an optimiser per bootstrap resample (slower) and because `theta` is
+unidentified without ties (in that case it warns and falls back to `"split"`).
+Chose Rao-Kupper over Davidson (1970) as the more commonly cited of the two;
+Davidson could be a later `tie=` value.
+
 ## ADR-010 — `--source` flag, one metric-picker, pyarrow behind an extra
 Input adapters (`lm-eval`, `lighteval`, `openai-evals`) are selected with
 `--source` rather than a flag per runner, so adding the next one is a new enum

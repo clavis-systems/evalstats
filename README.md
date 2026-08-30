@@ -121,7 +121,8 @@ in NLP*.
 - [ ] LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
 - [x] adapter for HuggingFace `lighteval` details (`--source lighteval`)
 - [x] adapter for OpenAI `evals` run logs (`--source openai-evals`)
-- [ ] Rao-Kupper / Davidson tie model for arena data
+- [x] Rao-Kupper tie model for arena data (`arena --tie rao-kupper`)
+- [ ] Davidson tie model; position-bias term
 - [x] `--format md` for drop-in paper tables
 
 ## Development

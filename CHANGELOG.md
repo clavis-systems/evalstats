@@ -22,6 +22,10 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
   stream): model/task from the `spec` line, score from each sample's
   `match` / `metrics` event (`data.correct`, else `data.score` / a `metric`
   key), first scoring event per `sample_id` wins. `--source openai-evals`.
+- `bradley_terry(tie="rao-kupper")` / `arena --tie rao-kupper`: the Rao-Kupper
+  (1967) tie model, with the tie parameter `theta` estimated by ML and given its
+  own bootstrap CI (`BTResult.tie_param` / `tie_param_ci`). Default stays
+  `tie="split"`.
 - Pairwise-preference (arena) support: `evalstats.preference` with
   `bradley_terry` (MM fit, bootstrap CIs on ratings and on every pairwise gap,
   Holm/BH correction), `elo` (order-dependent, provided but not recommended),

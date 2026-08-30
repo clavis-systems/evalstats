@@ -167,10 +167,25 @@ P(i beats j) = sigmoid(r_i - r_j)
 
 The ratings `r` (log-strength, centred to sum to zero) are fitted by the
 minorize-maximize iteration of Hunter (2004) — a short, monotonically
-convergent update that needs no optimiser. Ties are split as half a win to each
-side. A small pseudo-count (`prior`, default 0.1) is added to every matchup that
-actually occurred, so a model with a perfect or empty record still gets a finite
-rating.
+convergent update that needs no optimiser. A small pseudo-count (`prior`,
+default 0.1) is added to every matchup that actually occurred, so a model with a
+perfect or empty record still gets a finite rating.
+
+**Ties.** By default (`tie="split"`) a tie counts as half a win to each side.
+`tie="rao-kupper"` instead fits the Rao-Kupper (1967) model, which treats a tie
+as informative:
+
+```
+P(i beats j) = p_i / (p_i + theta·p_j),      theta >= 1
+P(tie)       = (theta² - 1)·p_i·p_j / [(p_i + theta·p_j)(theta·p_i + p_j)]
+```
+
+`theta` (returned as `tie_param`, with its own bootstrap CI) is estimated
+jointly with the ratings by maximum likelihood (L-BFGS-B). `theta = 1` means no
+tie tendency; larger `theta` means ties are more likely at a given skill gap.
+This runs an optimiser on every bootstrap resample, so it is slower — lower
+`n_boot` for many models. With no ties in the data `theta` is unidentified and
+the fit falls back to `"split"`.
 
 **Uncertainty** comes from resampling: the comparison rows are drawn with
 replacement `n_boot` times and the model is refitted each time. Per-model
@@ -183,8 +198,7 @@ else in the tool.
 `evalstats.preference.elo` is also available but is order-dependent (it walks
 the rows in sequence); Bradley-Terry is the one to report.
 
-*Not modelled yet:* a Rao-Kupper / Davidson tie model (ties carry information
-beyond "half a win"), position bias, and judge identity as a covariate.
+*Not modelled yet:* position bias, and judge identity as a covariate.
 
 ## What evalstats does not do (yet)
 
@@ -214,3 +228,5 @@ beyond "half a win"), position bias, and judge identity as a covariate.
   Designs: I. The Method of Paired Comparisons.* Biometrika.
 * Hunter, D. R. (2004). *MM Algorithms for Generalized Bradley-Terry Models.*
   Annals of Statistics.
+* Rao, P. V., & Kupper, L. L. (1967). *Ties in Paired-Comparison Experiments: A
+  Generalization of the Bradley-Terry Model.* JASA.

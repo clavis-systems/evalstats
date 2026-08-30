@@ -181,6 +181,7 @@ def arena(
     correction: str = typer.Option("holm", help="holm | bh | none."),
     n_boot: int = typer.Option(2000, help="Bootstrap resamples of the comparisons."),
     prior: float = typer.Option(0.1, help="Pseudo-count regularising perfect/empty records."),
+    tie: str = typer.Option("split", help="split | rao-kupper (joint tie parameter)."),
     seed: int = typer.Option(0, help="RNG seed."),
     fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
 ) -> None:
@@ -190,9 +191,13 @@ def arena(
     except (OSError, ValueError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(2)
-    res = bradley_terry(
-        df, level=level, correction=correction, n_boot=n_boot, prior=prior, seed=seed
-    )
+    try:
+        res = bradley_terry(
+            df, level=level, correction=correction, n_boot=n_boot, prior=prior, tie=tie, seed=seed
+        )
+    except ValueError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2)
     typer.echo(res.verdict())
     typer.echo("\n# ratings (Bradley-Terry, centred log-strength)")
     _emit(res.ranking, fmt)

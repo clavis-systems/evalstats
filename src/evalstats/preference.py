@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import math
 import os
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 
 from evalstats.stats import benjamini_hochberg, holm
 
@@ -138,6 +140,77 @@ def _fit_bt(
     return r - r.mean()
 
 
+def _pair_counts(df: pd.DataFrame, models: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """``(W, T)``: ``W[i, j]`` strict wins of i over j; ``T`` symmetric tie counts."""
+    idx = {m: k for k, m in enumerate(models)}
+    n = len(models)
+    w = np.zeros((n, n))
+    t = np.zeros((n, n))
+    for a, b, o in zip(df["model_a"], df["model_b"], df["outcome"], strict=True):
+        i, j = idx[a], idx[b]
+        if o == "a":
+            w[i, j] += 1.0
+        elif o == "b":
+            w[j, i] += 1.0
+        else:
+            t[i, j] += 1.0
+            t[j, i] += 1.0
+    return w, t
+
+
+def _fit_rao_kupper(
+    df: pd.DataFrame, models: list[str], *, prior: float = 0.1
+) -> tuple[np.ndarray, float | None]:
+    """Rao-Kupper tie model: ``P(i>j) = p_i / (p_i + theta*p_j)``, ``theta >= 1``.
+
+    Fitted by maximum likelihood (L-BFGS-B). Returns ``(centred ratings, theta)``.
+    Falls back to the split-tie MM fit (and ``theta = None``) when the data has
+    no ties, where ``theta`` is not identified.
+    """
+    n = len(models)
+    w, t = _pair_counts(df, models)
+    if t.sum() == 0:
+        warnings.warn(
+            "tie='rao-kupper' but the data has no ties; theta is not identified, "
+            "using the split-tie fit.",
+            stacklevel=2,
+        )
+        return _fit_bt(_wins_matrix(df, models), prior=prior), None
+
+    seen = (w + w.T + t) > 0
+    w = w + prior * (seen & ~np.eye(n, dtype=bool))
+    iu, ju = np.triu_indices(n, k=1)
+    w_ij, w_ji, t_ij = w[iu, ju], w[ju, iu], t[iu, ju]
+
+    def nll(x: np.ndarray) -> float:
+        r = np.concatenate(([0.0], x[: n - 1]))
+        log_theta = x[n - 1]  # theta = 1 + exp(log_theta) keeps theta > 1
+        theta = 1.0 + math.exp(min(log_theta, 30.0))
+        ri, rj = r[iu], r[ju]
+        ld_ij = np.logaddexp(ri, math.log(theta) + rj)
+        ld_ji = np.logaddexp(math.log(theta) + ri, rj)
+        lp_i = ri - ld_ij
+        lp_j = rj - ld_ji
+        lp_t = math.log(max(theta * theta - 1.0, 1e-12)) + ri + rj - ld_ij - ld_ji
+        return -float(w_ij @ lp_i + w_ji @ lp_j + t_ij @ lp_t)
+
+    res = minimize(nll, np.zeros(n), method="L-BFGS-B")
+    r = np.concatenate(([0.0], res.x[: n - 1]))
+    r = r - r.mean()
+    theta = 1.0 + math.exp(min(res.x[n - 1], 30.0))
+    return r, float(theta)
+
+
+def _fit(
+    df: pd.DataFrame, models: list[str], *, prior: float, tie: str
+) -> tuple[np.ndarray, float | None]:
+    if tie == "split":
+        return _fit_bt(_wins_matrix(df, models), prior=prior), None
+    if tie == "rao-kupper":
+        return _fit_rao_kupper(df, models, prior=prior)
+    raise ValueError(f"unknown tie model {tie!r} (split | rao-kupper)")
+
+
 @dataclass
 class BTResult:
     ranking: pd.DataFrame  # model, rating, ci_low, ci_high, n_games, win_rate
@@ -145,15 +218,23 @@ class BTResult:
         pd.DataFrame
     )  # model_a, model_b, rating_diff, ci_low, ci_high, p_raw, p_adj, significant
     level: float
+    tie: str = "split"
+    tie_param: float | None = None  # Rao-Kupper theta (>= 1); None for tie="split"
+    tie_param_ci: tuple[float, float] | None = None
 
     def verdict(self) -> str:
         top = self.ranking.iloc[0]
         sig = int(self.pairwise["significant"].sum()) if "significant" in self.pairwise else 0
-        return (
+        out = (
             f"{len(self.ranking)} models, {int(self.ranking['n_games'].sum() // 2)} comparisons. "
             f"Top: {top['model']} (rating {top['rating']:+.3f}). "
             f"{sig}/{len(self.pairwise)} rating gaps are significant."
         )
+        if self.tie_param is not None:
+            ci = self.tie_param_ci
+            span = f" (95% CI [{ci[0]:.2f}, {ci[1]:.2f}])" if ci else ""
+            out += f" Rao-Kupper theta = {self.tie_param:.2f}{span}."
+        return out
 
 
 def bradley_terry(
@@ -163,12 +244,17 @@ def bradley_terry(
     prior: float = 0.1,
     n_boot: int = 2000,
     correction: str = "holm",
+    tie: str = "split",
     seed: int = 0,
 ) -> BTResult:
     """Fit Bradley-Terry ratings with resampling-based uncertainty.
 
     ``df`` has columns ``model_a, model_b, outcome`` (``outcome`` in
     ``{"a", "b", "tie"}``) -- see :func:`load_pairwise`.
+
+    ``tie`` -- ``"split"`` (default) credits a tie as half a win to each side;
+    ``"rao-kupper"`` fits a joint tie parameter ``theta >= 1`` by maximum
+    likelihood (slower: an optimiser runs on every bootstrap resample).
     """
     df = _normalize_pairwise(df)
     models = sorted(set(df["model_a"]) | set(df["model_b"]))
@@ -177,7 +263,7 @@ def bradley_terry(
     idx = {m: k for k, m in enumerate(models)}
 
     w = _wins_matrix(df, models)
-    ratings = _fit_bt(w, prior=prior)
+    ratings, tie_param = _fit(df, models, prior=prior, tie=tie)
     games_per_model = (w + w.T).sum(axis=1)
     wins_per_model = w.sum(axis=1)
     win_rate = np.divide(
@@ -187,22 +273,26 @@ def bradley_terry(
     rng = np.random.default_rng(seed)
     n = len(df)
     boot = np.full((n_boot, len(models)), np.nan)
+    boot_theta = np.full(n_boot, np.nan)
     for b in range(n_boot):
         sample = df.iloc[rng.integers(0, n, size=n)]
         present = set(sample["model_a"]) | set(sample["model_b"])
-        if len(present) < len(models):
-            # keep replicate but only fill models that appear
-            sub = sorted(present)
-            wb = _wins_matrix(sample, sub)
-            rb = _fit_bt(wb, prior=prior)
-            for m, val in zip(sub, rb, strict=True):
-                boot[b, idx[m]] = val
-        else:
-            boot[b] = _fit_bt(_wins_matrix(sample, models), prior=prior)
+        sub = sorted(present)
+        rb, thb = _fit(sample, sub, prior=prior, tie=tie)
+        for m, val in zip(sub, rb, strict=True):
+            boot[b, idx[m]] = val
+        if thb is not None:
+            boot_theta[b] = thb
 
     lo_q, hi_q = (1 - level) / 2, 1 - (1 - level) / 2
     ci_low = np.nanquantile(boot, lo_q, axis=0)
     ci_high = np.nanquantile(boot, hi_q, axis=0)
+    tie_param_ci = None
+    if tie_param is not None and np.isfinite(boot_theta).any():
+        tie_param_ci = (
+            float(np.nanquantile(boot_theta, lo_q)),
+            float(np.nanquantile(boot_theta, hi_q)),
+        )
 
     ranking = (
         pd.DataFrame(
@@ -253,7 +343,14 @@ def bradley_terry(
         pairwise["significant"] = pairwise["p_adj"] < (1.0 - level)
         pairwise = pairwise.sort_values("p_adj").reset_index(drop=True)
 
-    return BTResult(ranking=ranking, pairwise=pairwise, level=level)
+    return BTResult(
+        ranking=ranking,
+        pairwise=pairwise,
+        level=level,
+        tie=tie,
+        tie_param=tie_param,
+        tie_param_ci=tie_param_ci,
+    )
 
 
 def elo(
