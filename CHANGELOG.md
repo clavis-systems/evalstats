@@ -6,6 +6,13 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
 
 ## [Unreleased]
 
+### Added
+- Pairwise-preference (arena) support: `evalstats.preference` with
+  `bradley_terry` (MM fit, bootstrap CIs on ratings and on every pairwise gap,
+  Holm/BH correction), `elo` (order-dependent, provided but not recommended),
+  and `load_pairwise`. New `evalstats arena` CLI command and
+  `scripts/make_arena.py` / `examples/arena.csv`.
+
 ### Fixed
 - Real-data validation against a live lm-evaluation-harness `samples.jsonl`
   (see `docs/VALIDATION.md`):

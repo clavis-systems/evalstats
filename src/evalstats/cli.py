@@ -11,6 +11,7 @@ from evalstats import __version__
 from evalstats.analysis import leaderboard as _leaderboard
 from evalstats.analysis import summarize
 from evalstats.loading import from_lm_eval_harness, load_results
+from evalstats.preference import bradley_terry, load_pairwise
 from evalstats.stats import (
     paired_difference,
     sample_size_for_ci_halfwidth,
@@ -145,6 +146,32 @@ def leaderboard(
     _emit(table, fmt)
     typer.echo(f"\n# pairwise (paired randomization test, {correction} corrected)")
     _emit(pairs, fmt)
+
+
+@app.command()
+def arena(
+    results: str = typer.Argument(..., help="CSV / JSONL of head-to-head comparisons."),
+    level: float = typer.Option(0.95, help="Confidence level."),
+    correction: str = typer.Option("holm", help="holm | bh | none."),
+    n_boot: int = typer.Option(2000, help="Bootstrap resamples of the comparisons."),
+    prior: float = typer.Option(0.1, help="Pseudo-count regularising perfect/empty records."),
+    seed: int = typer.Option(0, help="RNG seed."),
+    fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
+) -> None:
+    """Bradley-Terry skill ratings from pairwise-preference data, with CIs."""
+    try:
+        df = load_pairwise(results)
+    except (OSError, ValueError) as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2)
+    res = bradley_terry(
+        df, level=level, correction=correction, n_boot=n_boot, prior=prior, seed=seed
+    )
+    typer.echo(res.verdict())
+    typer.echo("\n# ratings (Bradley-Terry, centred log-strength)")
+    _emit(res.ranking, fmt)
+    typer.echo(f"\n# pairwise rating gaps ({correction} corrected)")
+    _emit(res.pairwise, fmt)
 
 
 @app.command()

@@ -14,6 +14,7 @@ Method references:
 
 from evalstats.analysis import leaderboard, pairwise_significance, summarize
 from evalstats.loading import load_results
+from evalstats.preference import BTResult, bradley_terry, elo, load_pairwise
 from evalstats.stats import (
     MeanEstimate,
     PairedResult,
@@ -29,13 +30,17 @@ from evalstats.stats import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "BTResult",
     "MeanEstimate",
     "PairedResult",
     "__version__",
     "benjamini_hochberg",
+    "bradley_terry",
     "clustered_mean_estimate",
+    "elo",
     "holm",
     "leaderboard",
+    "load_pairwise",
     "load_results",
     "mean_estimate",
     "paired_difference",

@@ -156,13 +156,42 @@ it, pass a rough shared accuracy `p` and `evalstats` uses the independence
 approximation `σ_d = sqrt(2 p (1 - p))`; with nothing, it assumes a
 conservative `σ_d = 0.5`.
 
+## 6. Pairwise preference (arena)
+
+When the data is head-to-head votes ("A beat B", "tie") rather than per-item
+scores, `evalstats arena` fits a **Bradley-Terry** model:
+
+```
+P(i beats j) = sigmoid(r_i - r_j)
+```
+
+The ratings `r` (log-strength, centred to sum to zero) are fitted by the
+minorize-maximize iteration of Hunter (2004) — a short, monotonically
+convergent update that needs no optimiser. Ties are split as half a win to each
+side. A small pseudo-count (`prior`, default 0.1) is added to every matchup that
+actually occurred, so a model with a perfect or empty record still gets a finite
+rating.
+
+**Uncertainty** comes from resampling: the comparison rows are drawn with
+replacement `n_boot` times and the model is refitted each time. Per-model
+rating CIs are percentiles of that bootstrap distribution; each pairwise
+rating gap gets a CI and a two-sided bootstrap p-value
+`2·min(frac(Δ* > 0), frac(Δ* < 0))`, then Holm / BH correction across all
+pairs. A gap whose CI spans 0 is within noise — the same reading as everywhere
+else in the tool.
+
+`evalstats.preference.elo` is also available but is order-dependent (it walks
+the rows in sequence); Bradley-Terry is the one to report.
+
+*Not modelled yet:* a Rao-Kupper / Davidson tie model (ties carry information
+beyond "half a win"), position bias, and judge identity as a covariate.
+
 ## What evalstats does not do (yet)
 
-* **Preference / arena data** — pairwise win-rates need Bradley-Terry or Elo
-  with their own uncertainty treatment. Planned for v0.2.
-* **LLM-as-judge** — a judge model adds a second source of variance
-  (judge sampling, judge bias) that a plain question-level test ignores. See
-  Gao et al. (2025), `arXiv:2511.21140`. Planned for v0.2.
+* **LLM-as-judge variance** — when the "votes" come from a judge model, that
+  judge adds its own variance (judge sampling, judge bias) on top of the
+  comparison sampling that `arena` already handles. See Gao et al. (2025),
+  `arXiv:2511.21140`. Planned for v0.2.
 * **Multiple checkpoints / training seeds** — `evalstats` quantifies
   *evaluation* noise, not *training* noise. If you have several trained
   replicas, that variance must be added separately.
@@ -181,3 +210,7 @@ conservative `σ_d = 0.5`.
   Binomial Proportion.* Statistical Science. (Wilson interval.)
 * Cameron, A. C., & Miller, D. L. (2015). *A Practitioner's Guide to
   Cluster-Robust Inference.* Journal of Human Resources.
+* Bradley, R. A., & Terry, M. E. (1952). *Rank Analysis of Incomplete Block
+  Designs: I. The Method of Paired Comparisons.* Biometrika.
+* Hunter, D. R. (2004). *MM Algorithms for Generalized Bradley-Terry Models.*
+  Annals of Statistics.

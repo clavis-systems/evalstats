@@ -52,8 +52,18 @@ Common aliases are recognised (`system`, `benchmark`, `doc_id`, `exact_match`,
 booleans, `"correct"`/`"incorrect"`, ...). lm-evaluation-harness `--log_samples`
 output is read directly with `--lm-eval`.
 
+For **pairwise-preference (arena) data**, `evalstats arena` takes a different
+shape — one row per head-to-head comparison:
+
+| column    | meaning                                          |
+|-----------|-------------------------------------------------|
+| `model_a` | first model                                     |
+| `model_b` | second model                                    |
+| `outcome` | `a` / `b` / `tie` (or a `winner` column naming the winning model) |
+
 ```bash
 python scripts/make_synthetic.py        # writes examples/results.jsonl
+python scripts/make_arena.py            # writes examples/arena.csv
 ```
 
 ## Commands
@@ -63,6 +73,7 @@ python scripts/make_synthetic.py        # writes examples/results.jsonl
 | `evalstats summary R`                | per-(model, task) mean, SE, CI, n; plus a cluster-robust per-model overall |
 | `evalstats compare R --a M1 --b M2`  | paired difference, bootstrap CI, permutation p-value, exact McNemar, verdict |
 | `evalstats leaderboard R`            | models ranked by cluster-robust score + pairwise significance matrix (Holm / BH) |
+| `evalstats arena P`                  | Bradley-Terry skill ratings from pairwise votes, with bootstrap CIs and significant-gap matrix |
 | `evalstats power ci --p 0.7 --half-width 0.02`     | items needed for a target CI width |
 | `evalstats power paired --mde 0.02 --p-pooled 0.7` | items needed to detect a given gap at 80% power |
 | `evalstats report R -o report.html`  | self-contained HTML report (needs `report` extra) |
@@ -82,6 +93,8 @@ lm-evaluation-harness sample logs.
   exact McNemar p-value for binary scores.
 * **Many models** — every pair compared, then Holm (family-wise) or
   Benjamini-Hochberg (false discovery rate) correction.
+* **Pairwise / arena data** — Bradley-Terry ratings (MM fit) with bootstrap CIs
+  on ratings and on every pairwise gap.
 * **Planning** — sample-size formulas for a target CI width or a target
   detectable gap.
 
@@ -94,9 +107,10 @@ in NLP*.
 
 ## Roadmap
 
-- [ ] v0.2: Bradley-Terry / Elo for pairwise-preference arenas
-- [ ] v0.2: LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
+- [x] Bradley-Terry / Elo for pairwise-preference arenas (`evalstats arena`)
+- [ ] LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
 - [ ] adapters for `lighteval` and OpenAI `evals` output
+- [ ] Rao-Kupper / Davidson tie model for arena data
 - [x] `--format md` for drop-in paper tables
 
 ## Development

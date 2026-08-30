@@ -3,6 +3,17 @@
 Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
+## ADR-009 — Bradley-Terry via MM, uncertainty via row bootstrap
+For arena data, fit BT with Hunter's (2004) minorize-maximize iteration rather
+than pulling in an optimiser or a new dependency (`choix`, `scipy.optimize`):
+it is ~10 lines, monotonic, and always converges. Ties are split 50/50 for v0.2
+(a Davidson/Rao-Kupper tie model is noted as future work). Uncertainty is a
+nonparametric bootstrap over the comparison rows — consistent with how the rest
+of the tool gets its CIs, and it sidesteps BT's fragile closed-form standard
+errors near a separated dataset. A small pseudo-count keeps perfect records
+finite. `elo()` is included because people ask for it, but flagged
+order-dependent and not the thing to report.
+
 ## ADR-008 — Degrade gracefully when there is only one cluster
 A single `task` (one cluster) gives the cluster bootstrap nothing to resample,
 so it reported `SE = 0` / a point CI — actively misleading. Found during

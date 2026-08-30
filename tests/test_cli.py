@@ -84,3 +84,26 @@ def test_report_writes_html(results_csv, tmp_path):
 def test_bad_file_exits_2(tmp_path):
     res = runner.invoke(app, ["summary", str(tmp_path / "missing.csv")])
     assert res.exit_code == 2
+
+
+def test_arena_command(tmp_path):
+    import pandas as pd
+
+    rows = []
+    for _ in range(60):
+        rows += [("strong", "weak", "a"), ("strong", "weak", "a"), ("strong", "weak", "b")]
+    p = tmp_path / "arena.csv"
+    pd.DataFrame(rows, columns=["model_a", "model_b", "outcome"]).to_csv(p, index=False)
+    res = runner.invoke(app, ["arena", str(p), "--n-boot", "200"])
+    assert res.exit_code == 0
+    assert "Bradley-Terry" in res.stdout
+    assert "strong" in res.stdout
+
+
+def test_arena_bad_outcome_exits_2(tmp_path):
+    import pandas as pd
+
+    p = tmp_path / "arena.csv"
+    pd.DataFrame({"model_a": ["x"], "model_b": ["y"], "outcome": ["???"]}).to_csv(p, index=False)
+    res = runner.invoke(app, ["arena", str(p)])
+    assert res.exit_code == 2
