@@ -10,7 +10,12 @@ import typer
 from evalstats import __version__
 from evalstats.analysis import leaderboard as _leaderboard
 from evalstats.analysis import summarize
-from evalstats.loading import from_lighteval, from_lm_eval_harness, load_results
+from evalstats.loading import (
+    from_lighteval,
+    from_lm_eval_harness,
+    from_openai_evals,
+    load_results,
+)
 from evalstats.preference import bradley_terry, load_pairwise
 from evalstats.stats import (
     paired_difference,
@@ -44,9 +49,11 @@ def _load(path: str, source: str, metric: str | None) -> pd.DataFrame:
             return from_lm_eval_harness(path, metric=metric)
         if source == "lighteval":
             return from_lighteval(path, metric=metric)
+        if source == "openai-evals":
+            return from_openai_evals(path, metric=metric)
         if source == "auto":
             return load_results(path)
-        raise ValueError(f"unknown --source {source!r} (auto | lm-eval | lighteval)")
+        raise ValueError(f"unknown --source {source!r} (auto | lm-eval | lighteval | openai-evals)")
     except (OSError, ValueError, ImportError) as exc:  # pragma: no cover - user input errors
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(2)
@@ -87,8 +94,10 @@ def summary(
     results: str = typer.Argument(..., help="CSV / JSONL results file."),
     level: float = typer.Option(0.95, help="Confidence level."),
     fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
-    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
-    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
+    source: str = typer.Option(
+        "auto", "--source", help="auto | lm-eval | lighteval | openai-evals."
+    ),
+    metric: str | None = typer.Option(None, help="Metric key when the log carries several."),
 ) -> None:
     """Per-(model, task) mean scores with confidence intervals."""
     df = _load(results, source, metric)
@@ -104,8 +113,10 @@ def compare(
     seed: int = typer.Option(0, help="RNG seed."),
     n_boot: int = typer.Option(10_000, help="Bootstrap resamples."),
     n_perm: int = typer.Option(10_000, help="Permutation resamples."),
-    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
-    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
+    source: str = typer.Option(
+        "auto", "--source", help="auto | lm-eval | lighteval | openai-evals."
+    ),
+    metric: str | None = typer.Option(None, help="Metric key when the log carries several."),
 ) -> None:
     """Paired comparison of two models on their common items."""
     df = _load(results, source, metric)
@@ -149,8 +160,10 @@ def leaderboard(
     correction: str = typer.Option("holm", help="holm | bh | none."),
     seed: int = typer.Option(0, help="RNG seed."),
     fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
-    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
-    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
+    source: str = typer.Option(
+        "auto", "--source", help="auto | lm-eval | lighteval | openai-evals."
+    ),
+    metric: str | None = typer.Option(None, help="Metric key when the log carries several."),
 ) -> None:
     """Rank models by cluster-robust overall score, with a pairwise matrix."""
     df = _load(results, source, metric)
@@ -222,8 +235,10 @@ def report(
     level: float = typer.Option(0.95, help="Confidence level."),
     correction: str = typer.Option("holm", help="holm | bh | none."),
     seed: int = typer.Option(0, help="RNG seed."),
-    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
-    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
+    source: str = typer.Option(
+        "auto", "--source", help="auto | lm-eval | lighteval | openai-evals."
+    ),
+    metric: str | None = typer.Option(None, help="Metric key when the log carries several."),
 ) -> None:
     """Write a self-contained HTML report (needs the 'report' extra)."""
     try:

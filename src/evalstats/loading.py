@@ -27,6 +27,7 @@ __all__ = [
     "REQUIRED_COLUMNS",
     "from_lighteval",
     "from_lm_eval_harness",
+    "from_openai_evals",
     "from_records",
     "load_results",
 ]
@@ -400,5 +401,80 @@ def from_lighteval(
         raise ValueError(
             f"no usable metric found in lighteval details; metric keys seen: {hint}. "
             "Pass metric=<one of those>."
+        )
+    return from_records(records)
+
+
+# --------------------------------------------------------------------------- #
+# OpenAI `evals` framework log (one JSONL event stream per run)
+# --------------------------------------------------------------------------- #
+def _openai_score(data: dict, metric: str | None) -> float | None:
+    if metric is not None:
+        v = data.get(metric)
+        return float(v) if _is_number(v) else None
+    if isinstance(data.get("correct"), bool):
+        return float(data["correct"])
+    for key in ("score", "accuracy", "passed", "match"):
+        if _is_number(data.get(key)):
+            return float(data[key])
+    return None
+
+
+def _openai_stem(fp: str) -> str:
+    stem = re.sub(r"\.jsonl?$", "", os.path.basename(fp))
+    return re.sub(r"[_-]\d{6,}.*$", "", stem)  # drop a trailing timestamp/run-id
+
+
+def from_openai_evals(
+    path_or_glob: str,
+    *,
+    metric: str | None = None,
+    model: str | None = None,
+) -> pd.DataFrame:
+    """Load an OpenAI ``evals`` run log (the JSONL event stream).
+
+    The first ``spec`` line gives the model (``completion_fns``) and task
+    (``eval_name``); per-sample ``match`` / ``metrics`` events carry the score
+    (``data.correct`` bool, else ``data.score`` / a ``metric`` key). ``item_id``
+    is the event ``sample_id``; the first scoring event per sample wins.
+    """
+    files = (
+        sorted(glob.glob(os.path.join(path_or_glob, "**", "*.jsonl"), recursive=True))
+        if os.path.isdir(path_or_glob)
+        else sorted(glob.glob(path_or_glob))
+    )
+    if not files:
+        raise FileNotFoundError(f"no .jsonl run log found for {path_or_glob!r}")
+
+    records: list[dict] = []
+    seen_keys: set[str] = set()
+    for fp in files:
+        lines = [x for x in _read_jsonl(fp) if isinstance(x, dict)]
+        spec = next((x["spec"] for x in lines if isinstance(x.get("spec"), dict)), {})
+        fns = spec.get("completion_fns") or spec.get("completions") or []
+        this_model = model or ("+".join(map(str, fns)) if fns else _openai_stem(fp))
+        task = spec.get("eval_name") or spec.get("base_eval") or _openai_stem(fp)
+
+        per_sample: dict[str, float] = {}
+        for x in lines:
+            sid = x.get("sample_id")
+            data = x.get("data")
+            if sid is None or not isinstance(data, dict):
+                continue
+            sc = _openai_score(data, metric)
+            if sc is None:
+                if x.get("type") in ("match", "metrics", "score"):
+                    seen_keys.update(k for k, v in data.items() if _is_number(v))
+                continue
+            per_sample.setdefault(str(sid), sc)
+
+        for sid, sc in per_sample.items():
+            records.append({"model": this_model, "task": str(task), "item_id": sid, "score": sc})
+
+    if not records:
+        hint = ", ".join(sorted(seen_keys)) or "none"
+        raise ValueError(
+            f"no scoring events found in the openai-evals log; numeric data keys "
+            f"seen on match/metrics events: {hint}. Pass metric=<one of those>."
         )
     return from_records(records)

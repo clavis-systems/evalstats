@@ -4,9 +4,9 @@ Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
 ## ADR-010 — `--source` flag, one metric-picker, pyarrow behind an extra
-Input adapters (`lm-eval`, `lighteval`) are selected with `--source` rather than
-a flag per runner, so adding the next one (OpenAI evals, ...) is a new enum
-value, not a new option on four commands. Both adapters share `_pick_metric`,
+Input adapters (`lm-eval`, `lighteval`, `openai-evals`) are selected with
+`--source` rather than a flag per runner, so adding the next one is a new enum
+value, not a new option on four commands. The adapters share `_pick_metric`,
 which reads a metric map keyed either plainly (`exact_match`) or with a filter
 suffix (`acc,none`), prefers a `,none` filter on ties, and raises on a genuinely
 ambiguous bare name. `lighteval` details are parquet, so `pyarrow` is an

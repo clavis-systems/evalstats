@@ -18,6 +18,10 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
   via the new `lighteval` extra / `pyarrow`, or json/jsonl). Reads the per-row
   `metric` (older: `metrics`) dict, keeps `|` in task names, disambiguates
   repeated row ids. Exposed as `evalstats ... --source lighteval`.
+- `from_openai_evals` adapter for OpenAI `evals` run logs (the JSONL event
+  stream): model/task from the `spec` line, score from each sample's
+  `match` / `metrics` event (`data.correct`, else `data.score` / a `metric`
+  key), first scoring event per `sample_id` wins. `--source openai-evals`.
 - Pairwise-preference (arena) support: `evalstats.preference` with
   `bradley_terry` (MM fit, bootstrap CIs on ratings and on every pairwise gap,
   Holm/BH correction), `elo` (order-dependent, provided but not recommended),

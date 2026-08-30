@@ -58,6 +58,7 @@ with `--source`:
 | `auto` (default) | your CSV / JSONL / JSON |
 | `lm-eval`    | EleutherAI lm-evaluation-harness `--log_samples` (`samples_*.jsonl`) |
 | `lighteval`  | HuggingFace lighteval `details/` (parquet — needs the `lighteval` extra — or json) |
+| `openai-evals` | OpenAI `evals` run log (the JSONL event stream) |
 
 Add `--metric acc` to pick a specific metric when a log carries several.
 
@@ -119,7 +120,7 @@ in NLP*.
 - [x] Bradley-Terry / Elo for pairwise-preference arenas (`evalstats arena`)
 - [ ] LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
 - [x] adapter for HuggingFace `lighteval` details (`--source lighteval`)
-- [ ] adapter for OpenAI `evals` output
+- [x] adapter for OpenAI `evals` run logs (`--source openai-evals`)
 - [ ] Rao-Kupper / Davidson tie model for arena data
 - [x] `--format md` for drop-in paper tables
 
