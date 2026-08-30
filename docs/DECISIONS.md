@@ -3,6 +3,18 @@
 Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
+## ADR-010 — `--source` flag, one metric-picker, pyarrow behind an extra
+Input adapters (`lm-eval`, `lighteval`) are selected with `--source` rather than
+a flag per runner, so adding the next one (OpenAI evals, ...) is a new enum
+value, not a new option on four commands. Both adapters share `_pick_metric`,
+which reads a metric map keyed either plainly (`exact_match`) or with a filter
+suffix (`acc,none`), prefers a `,none` filter on ties, and raises on a genuinely
+ambiguous bare name. `lighteval` details are parquet, so `pyarrow` is an
+optional `lighteval` extra (like `matplotlib` for `report`); the JSON details
+variant needs nothing. Task names keep their `|` from the lighteval filename;
+repeated row ids are disambiguated like the lm-eval adapter (ADR-... / the
+repeated-doc_id fix).
+
 ## ADR-009 — Bradley-Terry via MM, uncertainty via row bootstrap
 For arena data, fit BT with Hunter's (2004) minorize-maximize iteration rather
 than pulling in an optimiser or a new dependency (`choix`, `scipy.optimize`):

@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
-      - run: pip install -e ".[dev,report]"
+      - run: pip install -e ".[dev,report,lighteval]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python -m pytest --cov=evalstats --cov-report=term-missing

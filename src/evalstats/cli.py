@@ -10,7 +10,7 @@ import typer
 from evalstats import __version__
 from evalstats.analysis import leaderboard as _leaderboard
 from evalstats.analysis import summarize
-from evalstats.loading import from_lm_eval_harness, load_results
+from evalstats.loading import from_lighteval, from_lm_eval_harness, load_results
 from evalstats.preference import bradley_terry, load_pairwise
 from evalstats.stats import (
     paired_difference,
@@ -38,12 +38,16 @@ pd.set_option("display.max_rows", 200)
 pd.set_option("display.float_format", _fmt_num)
 
 
-def _load(path: str, lm_eval: bool, metric: str | None) -> pd.DataFrame:
+def _load(path: str, source: str, metric: str | None) -> pd.DataFrame:
     try:
-        if lm_eval:
+        if source == "lm-eval":
             return from_lm_eval_harness(path, metric=metric)
-        return load_results(path)
-    except (OSError, ValueError) as exc:  # pragma: no cover - user input errors
+        if source == "lighteval":
+            return from_lighteval(path, metric=metric)
+        if source == "auto":
+            return load_results(path)
+        raise ValueError(f"unknown --source {source!r} (auto | lm-eval | lighteval)")
+    except (OSError, ValueError, ImportError) as exc:  # pragma: no cover - user input errors
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(2)
 
@@ -83,11 +87,11 @@ def summary(
     results: str = typer.Argument(..., help="CSV / JSONL results file."),
     level: float = typer.Option(0.95, help="Confidence level."),
     fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
-    lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
-    metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
+    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
+    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
 ) -> None:
     """Per-(model, task) mean scores with confidence intervals."""
-    df = _load(results, lm_eval, metric)
+    df = _load(results, source, metric)
     _emit(summarize(df, level=level), fmt)
 
 
@@ -100,11 +104,11 @@ def compare(
     seed: int = typer.Option(0, help="RNG seed."),
     n_boot: int = typer.Option(10_000, help="Bootstrap resamples."),
     n_perm: int = typer.Option(10_000, help="Permutation resamples."),
-    lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
-    metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
+    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
+    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
 ) -> None:
     """Paired comparison of two models on their common items."""
-    df = _load(results, lm_eval, metric)
+    df = _load(results, source, metric)
     wide = df.pivot_table(
         index=["task", "item_id"], columns="model", values="score", aggfunc="mean"
     )
@@ -145,11 +149,11 @@ def leaderboard(
     correction: str = typer.Option("holm", help="holm | bh | none."),
     seed: int = typer.Option(0, help="RNG seed."),
     fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
-    lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
-    metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
+    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
+    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
 ) -> None:
     """Rank models by cluster-robust overall score, with a pairwise matrix."""
-    df = _load(results, lm_eval, metric)
+    df = _load(results, source, metric)
     table, pairs = _leaderboard(df, level=level, correction=correction, seed=seed)
     typer.echo("# ranking")
     _emit(table, fmt)
@@ -218,8 +222,8 @@ def report(
     level: float = typer.Option(0.95, help="Confidence level."),
     correction: str = typer.Option("holm", help="holm | bh | none."),
     seed: int = typer.Option(0, help="RNG seed."),
-    lm_eval: bool = typer.Option(False, "--lm-eval", help="Input is lm-eval-harness samples."),
-    metric: str | None = typer.Option(None, help="Metric key for --lm-eval input."),
+    source: str = typer.Option("auto", "--source", help="auto | lm-eval | lighteval."),
+    metric: str | None = typer.Option(None, help="Metric key for --source lm-eval / lighteval."),
 ) -> None:
     """Write a self-contained HTML report (needs the 'report' extra)."""
     try:
@@ -231,7 +235,7 @@ def report(
             err=True,
         )
         raise typer.Exit(3)
-    df = _load(results, lm_eval, metric)
+    df = _load(results, source, metric)
     path = build_report(df, out, level=level, correction=correction, seed=seed)
     typer.echo(f"wrote {path}")
 

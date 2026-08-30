@@ -107,6 +107,25 @@ def test_arena_command(tmp_path):
     assert "strong" in res.stdout
 
 
+def test_source_lighteval_reads_parquet(tmp_path):
+    import pandas as pd
+
+    date = "2024-06-01T00-00-00.0"
+    d = tmp_path / "details" / "M" / date
+    d.mkdir(parents=True)
+    pd.DataFrame({"metric": [{"acc,none": float(i % 2)} for i in range(20)]}).to_parquet(
+        d / f"details_gsm8k_{date}.parquet"
+    )
+    res = runner.invoke(app, ["summary", str(tmp_path), "--source", "lighteval"])
+    assert res.exit_code == 0
+    assert "gsm8k" in res.stdout
+
+
+def test_unknown_source_exits_2(results_csv):
+    res = runner.invoke(app, ["summary", results_csv, "--source", "bogus"])
+    assert res.exit_code == 2
+
+
 def test_arena_bad_outcome_exits_2(tmp_path):
     import pandas as pd
 

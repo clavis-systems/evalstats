@@ -31,11 +31,12 @@ model_a vs model_b: difference +0.0008 (95% CI [-0.0233, +0.0242]), p=1 >= 0.05.
 ## Install
 
 ```bash
-pip install -e ".[dev,report]"   # from a clone
+pip install -e ".[dev,report,lighteval]"   # from a clone
 ```
 
 Core needs only `numpy`, `scipy`, `pandas`, `typer`. The HTML report adds
-`matplotlib` (the `report` extra).
+`matplotlib` (`report` extra); reading lighteval `.parquet` adds `pyarrow`
+(`lighteval` extra).
 
 ## Input format
 
@@ -49,8 +50,16 @@ A CSV or JSON Lines file with one row per (model, item):
 | `score`   | `0`/`1` for pass-fail, or any real number           |
 
 Common aliases are recognised (`system`, `benchmark`, `doc_id`, `exact_match`,
-booleans, `"correct"`/`"incorrect"`, ...). lm-evaluation-harness `--log_samples`
-output is read directly with `--lm-eval`.
+booleans, `"correct"`/`"incorrect"`, ...). Eval-runner output is read directly
+with `--source`:
+
+| `--source`   | input |
+|--------------|-------|
+| `auto` (default) | your CSV / JSONL / JSON |
+| `lm-eval`    | EleutherAI lm-evaluation-harness `--log_samples` (`samples_*.jsonl`) |
+| `lighteval`  | HuggingFace lighteval `details/` (parquet — needs the `lighteval` extra — or json) |
+
+Add `--metric acc` to pick a specific metric when a log carries several.
 
 For **pairwise-preference (arena) data**, `evalstats arena` takes a different
 shape — one row per head-to-head comparison:
@@ -78,8 +87,8 @@ python scripts/make_arena.py            # writes examples/arena.csv
 | `evalstats power paired --mde 0.02 --p-pooled 0.7` | items needed to detect a given gap at 80% power |
 | `evalstats report R -o report.html`  | self-contained HTML report (needs `report` extra) |
 
-`R` is your results file. Add `--lm-eval` (and optionally `--metric acc`) for
-lm-evaluation-harness sample logs.
+`R` is your results file (or an eval-runner output directory with
+`--source lm-eval` / `--source lighteval`). `P` is a pairwise-comparison file.
 
 ## Methods
 
@@ -109,7 +118,8 @@ in NLP*.
 
 - [x] Bradley-Terry / Elo for pairwise-preference arenas (`evalstats arena`)
 - [ ] LLM-as-judge with annotator variance (cf. `arXiv:2511.21140`)
-- [ ] adapters for `lighteval` and OpenAI `evals` output
+- [x] adapter for HuggingFace `lighteval` details (`--source lighteval`)
+- [ ] adapter for OpenAI `evals` output
 - [ ] Rao-Kupper / Davidson tie model for arena data
 - [x] `--format md` for drop-in paper tables
 

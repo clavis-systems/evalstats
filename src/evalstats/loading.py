@@ -20,9 +20,21 @@ import re
 import warnings
 from collections.abc import Iterable
 
+import numpy as np
 import pandas as pd
 
-__all__ = ["REQUIRED_COLUMNS", "from_lm_eval_harness", "from_records", "load_results"]
+__all__ = [
+    "REQUIRED_COLUMNS",
+    "from_lighteval",
+    "from_lm_eval_harness",
+    "from_records",
+    "load_results",
+]
+
+
+def _is_number(v: object) -> bool:
+    return isinstance(v, (int, float, bool, np.integer, np.floating, np.bool_))
+
 
 REQUIRED_COLUMNS = ("model", "task", "item_id", "score")
 
@@ -173,14 +185,15 @@ def _normalize_metric_key(key: str) -> str:
     return key.split(",", 1)[0].strip()
 
 
-def _pick_metric(line: dict, metric: str | None) -> tuple[str, float] | None:
-    """Return ``(raw_key, value)`` for the chosen metric in one sample line.
+def _pick_metric(record: dict, metric: str | None) -> tuple[str, float] | None:
+    """Return ``(raw_key, value)`` for the chosen metric in one sample record.
 
+    Works on an lm-eval sample line or a lighteval ``metric`` dict alike.
     ``metric`` may be a bare name (``"acc"``) or a full key (``"acc,none"``).
     When several filters expose the same metric, a ``,none`` filter wins;
     otherwise a bare name is ambiguous and raises.
     """
-    numeric = {k: float(v) for k, v in line.items() if isinstance(v, (int, float, bool))}
+    numeric = {k: float(v) for k, v in record.items() if _is_number(v)}
     by_norm: dict[str, list[str]] = {}
     for raw in numeric:
         by_norm.setdefault(_normalize_metric_key(raw), []).append(raw)
@@ -250,9 +263,7 @@ def from_lm_eval_harness(
         for line in _read_jsonl(fp):
             picked = _pick_metric(line, metric)
             if picked is None:
-                seen_numeric_keys.update(
-                    k for k, v in line.items() if isinstance(v, (int, float, bool))
-                )
+                seen_numeric_keys.update(k for k, v in line.items() if _is_number(v))
                 continue
             raw_id = str(line.get("doc_id", line.get("id", len(records))))
             key = (this_model, task, raw_id)
@@ -267,6 +278,127 @@ def from_lm_eval_harness(
         hint = ", ".join(sorted(seen_numeric_keys)) or "none"
         raise ValueError(
             f"no usable metric found; numeric keys present were: {hint}. "
+            "Pass metric=<one of those>."
+        )
+    return from_records(records)
+
+
+# --------------------------------------------------------------------------- #
+# HuggingFace lighteval `details` output (parquet, or json/jsonl)
+# --------------------------------------------------------------------------- #
+_DETAIL_DATE_RE = re.compile(
+    r"^details_(?P<task>.+)_\d{4}-\d{2}-\d{2}T[^/\\]*\.(?:parquet|jsonl?|json)$"
+)
+
+
+def _lighteval_task(fname: str) -> str:
+    m = _DETAIL_DATE_RE.match(fname)
+    if m:
+        return m.group("task")
+    stem = re.sub(r"\.(?:parquet|jsonl?|json)$", "", fname)
+    return stem.removeprefix("details_")
+
+
+def _lighteval_model(fp: str, override: str | None) -> str:
+    if override:
+        return override
+    parent = os.path.basename(os.path.dirname(fp))
+    if re.match(r"\d{4}-\d{2}-\d{2}T", parent):  # .../details/<model>/<date_id>/file
+        grandparent = os.path.basename(os.path.dirname(os.path.dirname(fp)))
+        return grandparent or parent
+    return parent or "model"
+
+
+def _read_detail_rows(fp: str) -> list[dict]:
+    low = fp.lower()
+    if low.endswith(".parquet"):
+        try:
+            frame = pd.read_parquet(fp)
+        except ImportError as exc:  # pragma: no cover - depends on env
+            raise ImportError(
+                "reading lighteval .parquet details needs pyarrow -- "
+                "pip install 'evalstats[lighteval]'"
+            ) from exc
+        return frame.to_dict("records")
+    if low.endswith(".jsonl"):
+        return _read_jsonl(fp)
+    with open(fp, encoding="utf-8") as fh:
+        data = json.load(fh)
+    return list(data) if isinstance(data, list) else [data]
+
+
+def _detail_metric_map(row: dict) -> dict | None:
+    for key in ("metric", "metrics"):
+        val = row.get(key)
+        if isinstance(val, dict):
+            return val
+    return None
+
+
+def _detail_row_id(row: dict, i: int) -> str:
+    for k in ("id", "example_index", "doc_id", "index"):
+        v = row.get(k)
+        if v is not None and not isinstance(v, (list, dict)):
+            return str(v)
+    return str(i)
+
+
+def from_lighteval(
+    path_or_glob: str,
+    *,
+    metric: str | None = None,
+    model: str | None = None,
+) -> pd.DataFrame:
+    """Load HuggingFace lighteval ``details`` output.
+
+    ``path_or_glob`` may point at a details directory
+    (``.../details/<model>/<date_id>/``), a single ``details_*.parquet`` file, a
+    ``details_*.json`` / ``.jsonl`` file, or a glob. Each row carries a
+    ``metric`` (older: ``metrics``) dict of per-sample scores; the score is
+    chosen from ``metric`` or the first recognised metric name. The model comes
+    from ``model`` or the ``details/<model>/<date_id>`` path; the task from the
+    ``details_<task>_<date>`` filename (lighteval task names keep their ``|``).
+
+    Reading ``.parquet`` needs the ``lighteval`` extra (``pyarrow``); JSON does
+    not.
+    """
+    if os.path.isdir(path_or_glob):
+        files = sorted(
+            f
+            for pat in ("details_*.parquet", "details_*.jsonl", "details_*.json")
+            for f in glob.glob(os.path.join(path_or_glob, "**", pat), recursive=True)
+        )
+    else:
+        files = sorted(glob.glob(path_or_glob))
+    files = [f for f in files if "results_" not in os.path.basename(f)]
+    if not files:
+        raise FileNotFoundError(f"no details_*.parquet/json found for {path_or_glob!r}")
+
+    records: list[dict] = []
+    seen_keys: set[str] = set()
+    id_counts: dict[tuple[str, str, str], int] = {}
+    for fp in files:
+        task = _lighteval_task(os.path.basename(fp))
+        this_model = _lighteval_model(fp, model)
+        for i, row in enumerate(_read_detail_rows(fp)):
+            mmap = _detail_metric_map(row)
+            if mmap is None:
+                continue
+            picked = _pick_metric(mmap, metric)
+            if picked is None:
+                seen_keys.update(k for k, v in mmap.items() if _is_number(v))
+                continue
+            raw_id = _detail_row_id(row, i)
+            key = (this_model, task, raw_id)
+            id_counts[key] = id_counts.get(key, 0) + 1
+            item_id = raw_id if id_counts[key] == 1 else f"{raw_id}#{id_counts[key]}"
+            records.append(
+                {"model": this_model, "task": task, "item_id": item_id, "score": picked[1]}
+            )
+    if not records:
+        hint = ", ".join(sorted(seen_keys)) or "none"
+        raise ValueError(
+            f"no usable metric found in lighteval details; metric keys seen: {hint}. "
             "Pass metric=<one of those>."
         )
     return from_records(records)

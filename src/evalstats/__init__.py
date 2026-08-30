@@ -13,7 +13,7 @@ Method references:
 """
 
 from evalstats.analysis import leaderboard, pairwise_significance, summarize
-from evalstats.loading import load_results
+from evalstats.loading import from_lighteval, from_lm_eval_harness, load_results
 from evalstats.preference import BTResult, bradley_terry, elo, load_pairwise
 from evalstats.stats import (
     MeanEstimate,
@@ -38,6 +38,8 @@ __all__ = [
     "bradley_terry",
     "clustered_mean_estimate",
     "elo",
+    "from_lighteval",
+    "from_lm_eval_harness",
     "holm",
     "leaderboard",
     "load_pairwise",
