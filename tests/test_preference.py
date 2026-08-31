@@ -94,8 +94,8 @@ def _simulate_rk(skill, theta, n_per_pair, seed):
             p_a = pa / (pa + theta * pb)
             p_b = pb / (theta * pa + pb)
             probs = [p_a, p_b, max(1.0 - p_a - p_b, 0.0)]
-            for _ in range(n_per_pair):
-                rows.append((a, b, rng.choice(["a", "b", "tie"], p=probs)))
+            picks = rng.choice(["a", "b", "tie"], size=n_per_pair, p=probs)
+            rows.extend((a, b, o) for o in picks)
     return pd.DataFrame(rows, columns=["model_a", "model_b", "outcome"])
 
 

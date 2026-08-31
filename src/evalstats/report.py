@@ -17,7 +17,8 @@ from evalstats.analysis import leaderboard, summarize
 __all__ = ["build_report"]
 
 _CSS = """
-body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:2rem auto;max-width:60rem;color:#1a1a1a}
+body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:2rem auto;max-width:60rem}
+body{color:#1a1a1a}
 h1{margin-bottom:0}.sub{color:#666;margin-top:.25rem}
 table{border-collapse:collapse;margin:1rem 0;font-size:14px}
 th,td{border:1px solid #ddd;padding:.35rem .6rem;text-align:right}

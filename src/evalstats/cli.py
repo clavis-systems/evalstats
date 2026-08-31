@@ -56,7 +56,7 @@ def _load(path: str, source: str, metric: str | None) -> pd.DataFrame:
         raise ValueError(f"unknown --source {source!r} (auto | lm-eval | lighteval | openai-evals)")
     except (OSError, ValueError, ImportError) as exc:  # pragma: no cover - user input errors
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
 
 def _to_markdown(df: pd.DataFrame) -> str:
@@ -190,14 +190,14 @@ def arena(
         df = load_pairwise(results)
     except (OSError, ValueError) as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     try:
         res = bradley_terry(
             df, level=level, correction=correction, n_boot=n_boot, prior=prior, tie=tie, seed=seed
         )
     except ValueError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     typer.echo(res.verdict())
     typer.echo("\n# ratings (Bradley-Terry, centred log-strength)")
     _emit(res.ranking, fmt)
@@ -254,7 +254,7 @@ def report(
             fg=typer.colors.RED,
             err=True,
         )
-        raise typer.Exit(3)
+        raise typer.Exit(3) from None
     df = _load(results, source, metric)
     path = build_report(df, out, level=level, correction=correction, seed=seed)
     typer.echo(f"wrote {path}")

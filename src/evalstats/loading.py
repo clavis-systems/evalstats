@@ -144,7 +144,7 @@ def from_records(records: Iterable[dict]) -> pd.DataFrame:
 
 def _read_jsonl(path: str) -> list[dict]:
     rows: list[dict] = []
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if line:
@@ -173,7 +173,7 @@ def load_results(path: str, *, fmt: str | None = None) -> pd.DataFrame:
     if fmt == "jsonl":
         return from_records(_read_jsonl(path))
     if fmt == "json":
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         if isinstance(data, dict) and "results" in data:
             data = data["results"]

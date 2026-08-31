@@ -22,7 +22,7 @@ BASE = {"model_a": 0.70, "model_b": 0.71, "model_c": 0.82}
 
 def main() -> None:
     rng = np.random.default_rng(0)
-    task_offset = {t: o for t, o in zip(TASKS, rng.uniform(-0.12, 0.12, len(TASKS)))}
+    task_offset = dict(zip(TASKS, rng.uniform(-0.12, 0.12, len(TASKS)), strict=True))
 
     rows = []
     for task in TASKS:
