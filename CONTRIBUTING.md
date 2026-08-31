@@ -23,6 +23,9 @@ python -m pytest --cov=evalstats
 
 CI runs exactly these on Python 3.10–3.13.
 
+`python scripts/bench.py` times the resampling hot paths — run it if you touch
+`stats.py` or `preference.py` internals.
+
 ## Ground rules for statistical code
 
 1. **A new estimator or test ships with a calibration test.** Not just "it runs"

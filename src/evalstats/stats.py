@@ -50,6 +50,16 @@ def _is_binary(a: np.ndarray) -> bool:
     return bool(np.all(np.isin(a, (0.0, 1.0))))
 
 
+_MAX_RESAMPLE_CELLS = 8_000_000  # cap the temp (rows x n) array in resampling loops
+
+
+def _row_chunks(n_rows: int, n_cols: int):
+    """Yield chunk sizes that keep each temp array under ~_MAX_RESAMPLE_CELLS."""
+    step = max(1, _MAX_RESAMPLE_CELLS // max(n_cols, 1))
+    for start in range(0, n_rows, step):
+        yield min(step, n_rows - start)
+
+
 def _z(level: float) -> float:
     if not 0.0 < level < 1.0:
         raise ValueError("level must be in (0, 1)")
@@ -172,11 +182,11 @@ def clustered_mean_estimate(
             )
             return mean_estimate(a, level=level)
         rng = np.random.default_rng(seed)
-        by_cluster = [a[g == cid] for cid in uniq]
-        boot = np.empty(n_boot, dtype=float)
-        for i in range(n_boot):
-            pick = rng.integers(0, n_clusters, size=n_clusters)
-            boot[i] = np.concatenate([by_cluster[j] for j in pick]).mean()
+        # mean of a cluster resample = sum of picked cluster sums / sum of sizes
+        c_sum = np.array([a[g == cid].sum() for cid in uniq])
+        c_size = np.array([np.count_nonzero(g == cid) for cid in uniq], dtype=float)
+        picks = rng.integers(0, n_clusters, size=(n_boot, n_clusters))
+        boot = c_sum[picks].sum(axis=1) / c_size[picks].sum(axis=1)
         se = float(boot.std(ddof=1))
         lo, hi = np.quantile(boot, [(1 - level) / 2, 1 - (1 - level) / 2])
         lo, hi = _maybe_clip(float(lo), float(hi), a)
@@ -269,23 +279,27 @@ def paired_difference(
     # --- bootstrap CI -----------------------------------------------------
     if use_clusters:
         uniq = np.unique(g)
-        by_cluster = [d[g == cid] for cid in uniq]
         n_clusters = uniq.size
-        boot = np.empty(n_boot, dtype=float)
-        for i in range(n_boot):
-            pick = rng.integers(0, n_clusters, size=n_clusters)
-            boot[i] = np.concatenate([by_cluster[j] for j in pick]).mean()
+        c_sum = np.array([d[g == cid].sum() for cid in uniq])
+        c_size = np.array([np.count_nonzero(g == cid) for cid in uniq], dtype=float)
+        picks = rng.integers(0, n_clusters, size=(n_boot, n_clusters))
+        boot = c_sum[picks].sum(axis=1) / c_size[picks].sum(axis=1)
     else:
         boot = np.empty(n_boot, dtype=float)
-        for i in range(n_boot):
-            idx = rng.integers(0, n, size=n)
-            boot[i] = d[idx].mean()
+        filled = 0
+        for size in _row_chunks(n_boot, n):
+            idx = rng.integers(0, n, size=(size, n))
+            boot[filled : filled + size] = d[idx].mean(axis=1)
+            filled += size
     ci_low, ci_high = np.quantile(boot, [(1 - level) / 2, 1 - (1 - level) / 2])
 
     # --- sign-flip randomization p-value --------------------------------
-    signs = rng.choice((-1.0, 1.0), size=(n_perm, n))
-    perm_stats = np.abs((signs * d).mean(axis=1))
-    p_perm = (1.0 + int(np.count_nonzero(perm_stats >= abs(obs) - 1e-12))) / (n_perm + 1.0)
+    threshold = abs(obs) - 1e-12
+    exceed = 0
+    for size in _row_chunks(n_perm, n):
+        signs = rng.choice((-1.0, 1.0), size=(size, n))
+        exceed += int(np.count_nonzero(np.abs((signs * d).mean(axis=1)) >= threshold))
+    p_perm = (1.0 + exceed) / (n_perm + 1.0)
 
     # --- McNemar (binary only) -----------------------------------------
     p_mcnemar: float | None = None

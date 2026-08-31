@@ -96,21 +96,32 @@ def _normalize_pairwise(raw: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _wins_matrix(df: pd.DataFrame, models: list[str]) -> np.ndarray:
-    """``w[i, j]`` = credited wins of model i over model j (ties split)."""
+_OUTCOME_CODE = {"a": 0, "b": 1, "tie": 2}
+
+
+def _codes(df: pd.DataFrame, models: list[str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Integer-encode the comparison rows once so bootstrap resamples are cheap."""
     idx = {m: k for k, m in enumerate(models)}
-    n = len(models)
-    w = np.zeros((n, n), dtype=float)
-    for a, b, o in zip(df["model_a"], df["model_b"], df["outcome"], strict=True):
-        i, j = idx[a], idx[b]
-        if o == "a":
-            w[i, j] += 1.0
-        elif o == "b":
-            w[j, i] += 1.0
-        else:  # tie
-            w[i, j] += 0.5
-            w[j, i] += 0.5
-    return w
+    ai = df["model_a"].map(idx).to_numpy(dtype=np.intp)
+    bi = df["model_b"].map(idx).to_numpy(dtype=np.intp)
+    oc = df["outcome"].map(_OUTCOME_CODE).to_numpy(dtype=np.intp)
+    return ai, bi, oc
+
+
+def _wt_from_codes(
+    ai: np.ndarray, bi: np.ndarray, oc: np.ndarray, n: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(W, T)``: ``W[i, j]`` strict wins of i over j; ``T`` symmetric tie counts."""
+    a, b, k = oc == 0, oc == 1, oc == 2
+    w = np.bincount(ai[a] * n + bi[a], minlength=n * n).astype(float)
+    w += np.bincount(bi[b] * n + ai[b], minlength=n * n)
+    t = np.bincount(ai[k] * n + bi[k], minlength=n * n).astype(float)
+    t += np.bincount(bi[k] * n + ai[k], minlength=n * n)
+    return w.reshape(n, n), t.reshape(n, n)
+
+
+def _wt_matrices(df: pd.DataFrame, models: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    return _wt_from_codes(*_codes(df, models), len(models))
 
 
 def _fit_bt(
@@ -122,14 +133,13 @@ def _fit_bt(
     reg = prior * pair_seen  # pseudo-counts only between models that actually met
     wr = w + reg
     games = wr + wr.T
+    np.fill_diagonal(games, 0.0)
     wins = wr.sum(axis=1)
 
     p = np.ones(n, dtype=float)
     for _ in range(max_iter):
-        denom = np.zeros(n, dtype=float)
-        for i in range(n):
-            mask = np.arange(n) != i
-            denom[i] = np.sum(games[i, mask] / (p[i] + p[mask]))
+        # denom[i] = sum_j games[i, j] / (p[i] + p[j]); the j == i term is 0.
+        denom = (games / (p[:, None] + p[None, :])).sum(axis=1)
         p_new = wins / np.where(denom > 0, denom, 1.0)
         p_new = p_new / p_new.sum() * n  # keep scale pinned
         if np.max(np.abs(np.log(p_new) - np.log(p))) < tol:
@@ -140,42 +150,23 @@ def _fit_bt(
     return r - r.mean()
 
 
-def _pair_counts(df: pd.DataFrame, models: list[str]) -> tuple[np.ndarray, np.ndarray]:
-    """``(W, T)``: ``W[i, j]`` strict wins of i over j; ``T`` symmetric tie counts."""
-    idx = {m: k for k, m in enumerate(models)}
-    n = len(models)
-    w = np.zeros((n, n))
-    t = np.zeros((n, n))
-    for a, b, o in zip(df["model_a"], df["model_b"], df["outcome"], strict=True):
-        i, j = idx[a], idx[b]
-        if o == "a":
-            w[i, j] += 1.0
-        elif o == "b":
-            w[j, i] += 1.0
-        else:
-            t[i, j] += 1.0
-            t[j, i] += 1.0
-    return w, t
-
-
-def _fit_rao_kupper(
-    df: pd.DataFrame, models: list[str], *, prior: float = 0.1
+def _fit_rao_kupper_counts(
+    w: np.ndarray, t: np.ndarray, *, prior: float = 0.1
 ) -> tuple[np.ndarray, float | None]:
     """Rao-Kupper tie model: ``P(i>j) = p_i / (p_i + theta*p_j)``, ``theta >= 1``.
 
     Fitted by maximum likelihood (L-BFGS-B). Returns ``(centred ratings, theta)``.
-    Falls back to the split-tie MM fit (and ``theta = None``) when the data has
-    no ties, where ``theta`` is not identified.
+    Falls back to the split-tie MM fit (and ``theta = None``) when there are no
+    ties, where ``theta`` is not identified.
     """
-    n = len(models)
-    w, t = _pair_counts(df, models)
+    n = w.shape[0]
     if t.sum() == 0:
         warnings.warn(
             "tie='rao-kupper' but the data has no ties; theta is not identified, "
             "using the split-tie fit.",
             stacklevel=2,
         )
-        return _fit_bt(_wins_matrix(df, models), prior=prior), None
+        return _fit_bt(w, prior=prior), None
 
     seen = (w + w.T + t) > 0
     w = w + prior * (seen & ~np.eye(n, dtype=bool))
@@ -201,13 +192,14 @@ def _fit_rao_kupper(
     return r, float(theta)
 
 
-def _fit(
-    df: pd.DataFrame, models: list[str], *, prior: float, tie: str
+def _fit_counts(
+    w: np.ndarray, t: np.ndarray, *, prior: float, tie: str
 ) -> tuple[np.ndarray, float | None]:
+    """Fit ratings from strict-win / tie count matrices."""
     if tie == "split":
-        return _fit_bt(_wins_matrix(df, models), prior=prior), None
+        return _fit_bt(w + 0.5 * t, prior=prior), None  # tie = half a win each way
     if tie == "rao-kupper":
-        return _fit_rao_kupper(df, models, prior=prior)
+        return _fit_rao_kupper_counts(w, t, prior=prior)
     raise ValueError(f"unknown tie model {tie!r} (split | rao-kupper)")
 
 
@@ -258,29 +250,37 @@ def bradley_terry(
     """
     df = _normalize_pairwise(df)
     models = sorted(set(df["model_a"]) | set(df["model_b"]))
-    if len(models) < 2:
+    n_models = len(models)
+    if n_models < 2:
         raise ValueError("need >= 2 models")
-    idx = {m: k for k, m in enumerate(models)}
 
-    w = _wins_matrix(df, models)
-    ratings, tie_param = _fit(df, models, prior=prior, tie=tie)
-    games_per_model = (w + w.T).sum(axis=1)
-    wins_per_model = w.sum(axis=1)
+    ai, bi, oc = _codes(df, models)
+    w, t = _wt_from_codes(ai, bi, oc, n_models)
+    ratings, tie_param = _fit_counts(w, t, prior=prior, tie=tie)
+
+    games_per_model = (w + w.T + t).sum(axis=1)  # every comparison counts for 2 models
+    wins_per_model = (w + 0.5 * t).sum(axis=1)
     win_rate = np.divide(
-        wins_per_model, games_per_model, out=np.full(len(models), np.nan), where=games_per_model > 0
+        wins_per_model, games_per_model, out=np.full(n_models, np.nan), where=games_per_model > 0
     )
 
     rng = np.random.default_rng(seed)
     n = len(df)
-    boot = np.full((n_boot, len(models)), np.nan)
+    boot = np.full((n_boot, n_models), np.nan)
     boot_theta = np.full(n_boot, np.nan)
     for b in range(n_boot):
-        sample = df.iloc[rng.integers(0, n, size=n)]
-        present = set(sample["model_a"]) | set(sample["model_b"])
-        sub = sorted(present)
-        rb, thb = _fit(sample, sub, prior=prior, tie=tie)
-        for m, val in zip(sub, rb, strict=True):
-            boot[b, idx[m]] = val
+        sel = rng.integers(0, n, size=n)
+        wb, tb = _wt_from_codes(ai[sel], bi[sel], oc[sel], n_models)
+        present = np.zeros(n_models, dtype=bool)
+        present[ai[sel]] = True
+        present[bi[sel]] = True
+        if present.all():
+            rb, thb = _fit_counts(wb, tb, prior=prior, tie=tie)
+            boot[b] = rb
+        else:
+            ix = np.ix_(present, present)
+            rb, thb = _fit_counts(wb[ix], tb[ix], prior=prior, tie=tie)
+            boot[b, present] = rb
         if thb is not None:
             boot_theta[b] = thb
 
@@ -311,25 +311,25 @@ def bradley_terry(
     ranking.insert(0, "rank", np.arange(1, len(ranking) + 1))
 
     recs: list[dict] = []
-    for a, bmod in ((x, y) for i, x in enumerate(models) for y in models[i + 1 :]):
-        ia, ib = idx[a], idx[bmod]
-        diff = ratings[ia] - ratings[ib]
-        bd = boot[:, ia] - boot[:, ib]
-        bd = bd[~np.isnan(bd)]
-        if bd.size == 0:
-            continue
-        frac_pos = float(np.mean(bd > 0))
-        p_raw = 2.0 * min(frac_pos, 1.0 - frac_pos)
-        recs.append(
-            {
-                "model_a": a,
-                "model_b": bmod,
-                "rating_diff": diff,
-                "ci_low": float(np.quantile(bd, lo_q)),
-                "ci_high": float(np.quantile(bd, hi_q)),
-                "p_raw": max(p_raw, 1.0 / (bd.size + 1)),
-            }
-        )
+    for ia in range(n_models):
+        for ib in range(ia + 1, n_models):
+            diff = ratings[ia] - ratings[ib]
+            bd = boot[:, ia] - boot[:, ib]
+            bd = bd[~np.isnan(bd)]
+            if bd.size == 0:
+                continue
+            frac_pos = float(np.mean(bd > 0))
+            p_raw = 2.0 * min(frac_pos, 1.0 - frac_pos)
+            recs.append(
+                {
+                    "model_a": models[ia],
+                    "model_b": models[ib],
+                    "rating_diff": diff,
+                    "ci_low": float(np.quantile(bd, lo_q)),
+                    "ci_high": float(np.quantile(bd, hi_q)),
+                    "p_raw": max(p_raw, 1.0 / (bd.size + 1)),
+                }
+            )
     pairwise = pd.DataFrame(recs)
     if not pairwise.empty:
         if correction == "holm":

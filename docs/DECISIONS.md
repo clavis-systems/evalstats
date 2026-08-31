@@ -3,6 +3,16 @@
 Short architecture-decision records. Newest first. Each entry: the choice, why,
 and what would make us revisit it.
 
+## ADR-012 — Vectorised resampling, identical numbers
+The bootstrap / permutation / MM-fit inner loops are vectorised over the
+resample axis (cluster-sum lookups instead of `concatenate`; a broadcast MM
+update instead of a per-model Python loop; `bincount` on integer-coded rows for
+the arena bootstrap instead of re-scanning the DataFrame). The RNG is drawn in
+the same order as before, so results are **bit-identical for a given seed** —
+this is a speed/memory change, not a statistical one, and the calibration tests
+are unchanged. Large temp arrays are chunked to stay under ~8M cells.
+`scripts/bench.py` times the hot paths.
+
 ## ADR-011 — Rao-Kupper ties: opt-in, MLE, bootstrap for theta
 `bradley_terry(tie="split")` stays the default (fast MM fit, matches Chatbot
 Arena's basic BT). `tie="rao-kupper"` adds the Rao-Kupper (1967) tie model,

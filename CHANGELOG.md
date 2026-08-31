@@ -10,6 +10,11 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
 - Table / Markdown / HTML output shows a small nonzero value (a tiny p-value or
   CI bound) in scientific notation instead of rounding it to `0.0000`; an exact
   zero still prints `0.0000`.
+- Vectorised the bootstrap / permutation / Bradley-Terry MM inner loops
+  (cluster-sum lookups, broadcast MM update, `bincount` on integer-coded
+  comparison rows). Results are bit-identical for a given seed; large temp
+  arrays are chunked. Stricter ruff rule set (`B`, `C4`, `SIM`, `PERF`, `RUF`,
+  `UP`, `NPY`, `I`) enforced in CI. Added `scripts/bench.py`.
 - CLI input selection is now `--source auto | lm-eval | lighteval` (replaces the
   `--lm-eval` flag) on `summary` / `compare` / `leaderboard` / `report`.
 
