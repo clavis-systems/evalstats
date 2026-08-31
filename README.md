@@ -24,6 +24,16 @@ $ evalstats compare examples/results.jsonl --a model_a --b model_b
 model_a vs model_b: difference +0.0008 (95% CI [-0.0233, +0.0242]), p=1 >= 0.05. Within noise -- no significant difference.
 ```
 
+…and, for a whole leaderboard, the probability each model is *truly* on top:
+
+```text
+$ evalstats ranks examples/results.jsonl
+  model   mean  rank  p_rank1  mean_rank  rank_lo  rank_hi
+model_c 0.8100     1   1.0000     1.0000     1.0000   1.0000
+model_a 0.6967     2   0.0000     2.4519     2.0000   3.0000
+model_b 0.6958     3   0.0000     2.5481     2.0000   3.0000
+```
+
 > **Status:** pre-1.0, built in the open. The statistics are textbook; the
 > contribution is packaging them into one command that plugs into real eval
 > pipelines. Bug reports and format requests very welcome.
@@ -83,10 +93,11 @@ python scripts/make_arena.py            # writes examples/arena.csv
 | `evalstats summary R`                | per-(model, task) mean, SE, CI, n; plus a cluster-robust per-model overall |
 | `evalstats compare R --a M1 --b M2`  | paired difference, bootstrap CI, permutation p-value, exact McNemar, verdict |
 | `evalstats leaderboard R`            | models ranked by cluster-robust score + pairwise significance matrix (Holm / BH) |
+| `evalstats ranks R`                  | P(each model holds each rank) — e.g. "62% chance this model is really #1" |
 | `evalstats arena P`                  | Bradley-Terry skill ratings from pairwise votes, with bootstrap CIs and significant-gap matrix |
 | `evalstats power ci --p 0.7 --half-width 0.02`     | items needed for a target CI width |
 | `evalstats power paired --mde 0.02 --p-pooled 0.7` | items needed to detect a given gap at 80% power |
-| `evalstats report R -o report.html`  | self-contained HTML report (needs `report` extra) |
+| `evalstats report R -o report.html`  | self-contained HTML report ([example](examples/report.html), needs `report` extra) |
 
 `R` is your results file (or an eval-runner output directory with
 `--source lm-eval` / `--source lighteval`). `P` is a pairwise-comparison file.
@@ -102,7 +113,8 @@ python scripts/make_arena.py            # writes examples/arena.csv
   two-sided sign-flip randomization test, a cluster-aware bootstrap CI, and an
   exact McNemar p-value for binary scores.
 * **Many models** — every pair compared, then Holm (family-wise) or
-  Benjamini-Hochberg (false discovery rate) correction.
+  Benjamini-Hochberg (false discovery rate) correction; plus `ranks` for
+  P(model = #1) via a task-cluster bootstrap.
 * **Pairwise / arena data** — Bradley-Terry ratings (MM fit) with bootstrap CIs
   on ratings and on every pairwise gap.
 * **Planning** — sample-size formulas for a target CI width or a target

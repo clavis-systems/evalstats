@@ -12,7 +12,12 @@ Method references:
       Significance in Natural Language Processing"
 """
 
-from evalstats.analysis import leaderboard, pairwise_significance, summarize
+from evalstats.analysis import (
+    leaderboard,
+    pairwise_significance,
+    rank_probabilities,
+    summarize,
+)
 from evalstats.loading import (
     from_lighteval,
     from_lm_eval_harness,
@@ -53,6 +58,7 @@ __all__ = [
     "mean_estimate",
     "paired_difference",
     "pairwise_significance",
+    "rank_probabilities",
     "sample_size_for_ci_halfwidth",
     "sample_size_for_paired_detection",
     "summarize",

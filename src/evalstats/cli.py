@@ -9,7 +9,7 @@ import typer
 
 from evalstats import __version__
 from evalstats.analysis import leaderboard as _leaderboard
-from evalstats.analysis import summarize
+from evalstats.analysis import rank_probabilities, summarize
 from evalstats.loading import (
     from_lighteval,
     from_lm_eval_harness,
@@ -172,6 +172,28 @@ def leaderboard(
     _emit(table, fmt)
     typer.echo(f"\n# pairwise (paired randomization test, {correction} corrected)")
     _emit(pairs, fmt)
+
+
+@app.command()
+def ranks(
+    results: str = typer.Argument(..., help="CSV / JSONL results file."),
+    level: float = typer.Option(0.95, help="Confidence level for the rank CI."),
+    n_boot: int = typer.Option(10_000, help="Bootstrap resamples."),
+    seed: int = typer.Option(0, help="RNG seed."),
+    fmt: str = typer.Option("table", "--format", help="table | csv | json | md."),
+    source: str = typer.Option(
+        "auto", "--source", help="auto | lm-eval | lighteval | openai-evals."
+    ),
+    metric: str | None = typer.Option(None, help="Metric key when the log carries several."),
+) -> None:
+    """P(each model holds each rank) once evaluation noise is accounted for."""
+    df = _load(results, source, metric)
+    try:
+        out = rank_probabilities(df, level=level, n_boot=n_boot, seed=seed)
+    except ValueError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2) from None
+    _emit(out, fmt)
 
 
 @app.command()

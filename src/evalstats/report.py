@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from evalstats.analysis import leaderboard, summarize
+from evalstats.analysis import leaderboard, rank_probabilities, summarize
 
 __all__ = ["build_report"]
 
@@ -60,6 +60,10 @@ def build_report(
 ) -> str:
     summ = summarize(df, level=level, seed=seed)
     table, pairs = leaderboard(df, level=level, correction=correction, seed=seed)
+    try:
+        ranks = rank_probabilities(df, level=level, seed=seed)
+    except ValueError:
+        ranks = None
 
     n_models = df["model"].nunique()
     n_tasks = df["task"].nunique()
@@ -91,6 +95,11 @@ def build_report(
 <p>Highlighted rows are significant after correction (paired sign-flip
 randomization test, cluster bootstrap CI). A gap whose CI spans 0 is within noise.</p>
 {_table_html(pairs, sig_col="significant")}
+
+<h2>Rank probabilities</h2>
+<p><code>p_rank1</code> is P(model is truly best) under a task-cluster bootstrap.
+If the top rows share it, the leaderboard order is within noise.</p>
+{_table_html(ranks) if ranks is not None else "<p>(needs items shared by all models)</p>"}
 
 <h2>Per-task breakdown</h2>
 {_table_html(summ)}

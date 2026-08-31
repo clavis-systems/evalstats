@@ -20,6 +20,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# evalstats output
+# evalstats output (but keep the committed examples/ one)
 *.evalstats.html
-report.html
+/report.html

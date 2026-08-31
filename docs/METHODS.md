@@ -132,6 +132,16 @@ corrects:
   *fraction* of false positives among the flagged pairs). Less strict; use it
   when you are screening many models and can tolerate some false flags.
 
+### Rank probabilities
+
+`evalstats ranks` answers a different question: not "is A > B?" for each pair,
+but "how often is each model *first*?". A cluster bootstrap resamples the tasks,
+recomputes every model's overall score on the pooled items, and ranks them;
+`p_rank1` is the fraction of resamples in which a model comes out on top,
+`mean_rank` and the rank CI summarise where it lands. A leaderboard where the
+top two models both have `p_rank1 ≈ 0.5` is a leaderboard whose #1 is a
+coin-flip. Models are ranked only on the items they all share.
+
 ## 5. Planning an experiment
 
 ### Target CI width

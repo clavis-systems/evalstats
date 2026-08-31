@@ -19,6 +19,9 @@ follow [Semantic Versioning](https://semver.org/) from 1.0.0 onward.
   `--lm-eval` flag) on `summary` / `compare` / `leaderboard` / `report`.
 
 ### Added
+- `rank_probabilities` / `evalstats ranks`: task-cluster bootstrap over the
+  whole leaderboard giving P(each model holds each rank) — `p_rank1`, `p_top3`,
+  mean bootstrap rank and a rank CI. Answers "is our #1 real, or a coin-flip?".
 - `from_lighteval` adapter for HuggingFace lighteval `details/` output (parquet
   via the new `lighteval` extra / `pyarrow`, or json/jsonl). Reads the per-row
   `metric` (older: `metrics`) dict, keeps `|` in task names, disambiguates
